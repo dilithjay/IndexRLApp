@@ -37,7 +37,7 @@ def save_dataset(name, zip):
     with open(meta_data_file, "a") as fp:
         fp.write(f"{name},{n_channels},{data_path}\n")
     meta_data_df = pd.read_csv(meta_data_file)
-    return meta_data_df
+    return meta_data_df, gr.Dropdown.update(choices=meta_data_df["Name"].to_list())
 
 
 def find_expression(dataset_name: str):
@@ -142,7 +142,9 @@ with gr.Blocks() as demo:
         outputs=dataset_name,
     )
     dataset_upload_btn.click(
-        save_dataset, inputs=[dataset_name, dataset_upload], outputs=[dataset_table]
+        save_dataset,
+        inputs=[dataset_name, dataset_upload],
+        outputs=[dataset_table, select_dataset],
     )
 
 demo.queue(concurrency_count=10).launch(debug=True)
