@@ -17,7 +17,10 @@ from indexrl.training import (
 from indexrl.environment import IndexRLEnv
 from indexrl.utils import get_n_channels, state_to_expression
 
+
+max_exp_len = 12
 data_dir = "data/"
+global_logs_dir = os.path.join(data_dir, "logs")
 os.makedirs(data_dir, exist_ok=True)
 
 meta_data_file = os.path.join(data_dir, "metadata.csv")
@@ -40,7 +43,31 @@ def save_dataset(name, zip):
     return meta_data_df, gr.Dropdown.update(choices=meta_data_df["Name"].to_list())
 
 
+def get_tree(exp_num: int = 1, tree_num: int = 1):
+    tree_num = max(tree_num, 1)
+    tree_path = os.path.join(
+        global_logs_dir, f"tree_{int(exp_num)}_{int(tree_num)}.txt"
+    )
+    if os.path.exists(tree_path):
+        with open(tree_path, "r", encoding="utf-8") as fp:
+            tree = fp.read()
+
+        return tree
+    print(f"Tree at {tree_path} not found!")
+    return ""
+
+
+def change_expression(exp_num: int = 1, tree_num: int = 1):
+    paths = glob(os.path.join(global_logs_dir, f"tree_{int(exp_num)}_*.txt"))
+    tree_num = max(min(len(paths), tree_num), 1)
+
+    tree = get_tree(exp_num, tree_num)
+
+    return tree, gr.Slider.update(value=tree_num, maximum=len(paths))
+
+
 def find_expression(dataset_name: str):
+    global global_logs_dir
     meta_data_df = pd.read_csv(meta_data_file, index_col="Name")
     n_channels = meta_data_df["Channels"][dataset_name]
     data_dir = meta_data_df["Path"][dataset_name]
@@ -49,7 +76,7 @@ def find_expression(dataset_name: str):
     mask_dir = os.path.join(data_dir, "masks")
 
     cache_dir = os.path.join(data_dir, "cache")
-    logs_dir = os.path.join(data_dir, "logs")
+    global_logs_dir = logs_dir = os.path.join(data_dir, "logs")
     models_dir = os.path.join(data_dir, "models")
     for dir_name in (cache_dir, logs_dir, models_dir):
         Path(dir_name).mkdir(parents=True, exist_ok=True)
@@ -57,7 +84,7 @@ def find_expression(dataset_name: str):
     action_list = (
         list("()+-*/=") + ["sq", "sqrt"] + [f"c{c}" for c in range(n_channels)]
     )
-    env = IndexRLEnv(action_list, 12)
+    env = IndexRLEnv(action_list, max_exp_len)
     agent, optimizer = create_model(len(action_list))
     seen_path = os.path.join(cache_dir, "seen.pkl") if cache_dir else ""
     env.save_seen(seen_path)
@@ -76,6 +103,7 @@ def find_expression(dataset_name: str):
             1,
             logs_dir,
             seen_path,
+            tree_prefix=f"tree_{int(i)}",
             n_iters=1000,
         )
         print(
@@ -95,8 +123,7 @@ def find_expression(dataset_name: str):
             with open(f"{cache_dir}/data_buffer_{i_str}.pkl", "wb") as fp:
                 pickle.dump(data_buffer, fp)
 
-        with open(os.path.join(logs_dir, "tree_1.txt"), "r", encoding="utf-8") as fp:
-            tree = fp.read()
+        tree = get_tree()
 
         top_5 = data_buffer.get_top_n(5)
         top_5_str = "\n".join(
@@ -108,7 +135,9 @@ def find_expression(dataset_name: str):
             )
         )
 
-        yield tree, top_5_str
+        yield tree, top_5_str, gr.Slider.update(
+            value=i, maximum=i, interactive=True
+        ), gr.Slider.update(value=1, maximum=len(data[-1][0]), interactive=True)
 
 
 with gr.Blocks(title="IndexRL") as demo:
@@ -116,14 +145,26 @@ with gr.Blocks(title="IndexRL") as demo:
     meta_data_df = pd.read_csv(meta_data_file)
 
     with gr.Tab("Find Expressions"):
-        select_dataset = gr.Dropdown(
-            label="Select Dataset",
-            choices=meta_data_df["Name"].to_list(),
-        )
-        find_exp_btn = gr.Button("Find Expressions")
-        stop_btn = gr.Button("Stop")
-        best_exps = gr.Textbox(label="Best Expressions", interactive=False)
-        out_exp_tree = gr.Textbox(label="Latest Expression Tree", interactive=False)
+        with gr.Row():
+            with gr.Column():
+                select_dataset = gr.Dropdown(
+                    label="Select Dataset",
+                    choices=meta_data_df["Name"].to_list(),
+                )
+                find_exp_btn = gr.Button("Find Expressions", variant="primary")
+                stop_btn = gr.Button("Stop", variant="stop")
+                best_exps = gr.Textbox(label="Best Expressions", interactive=False)
+
+            with gr.Column():
+                select_exp = gr.Slider(
+                    value=1, label="Iteration", interactive=False, minimum=1, step=1
+                )
+                select_tree = gr.Slider(
+                    value=1, label="Tree Number", interactive=False, minimum=1, step=1
+                )
+                out_exp_tree = gr.Textbox(
+                    label="Latest Expression Tree", interactive=False
+                )
 
     with gr.Tab("Datasets"):
         dataset_upload = gr.File(label="Upload Data ZIP file")
@@ -133,9 +174,21 @@ with gr.Blocks(title="IndexRL") as demo:
         dataset_table = gr.Dataframe(meta_data_df, label="Dataset Table")
 
     find_exp_event = find_exp_btn.click(
-        find_expression, inputs=[select_dataset], outputs=[out_exp_tree, best_exps]
+        find_expression,
+        inputs=[select_dataset],
+        outputs=[out_exp_tree, best_exps, select_exp, select_tree],
     )
     stop_btn.click(fn=None, inputs=None, outputs=None, cancels=[find_exp_event])
+    select_exp.change(
+        fn=lambda x, y: change_expression(x, y),
+        inputs=[select_exp, select_tree],
+        outputs=[out_exp_tree, select_tree],
+    )
+    select_tree.change(
+        fn=lambda x, y: get_tree(x, y),
+        inputs=[select_exp, select_tree],
+        outputs=out_exp_tree,
+    )
 
     dataset_upload.upload(
         lambda x: ".".join(os.path.basename(x.orig_name).split(".")[:-1]),
