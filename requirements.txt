@@ -1,2 +1,2 @@
-indexrl==0.1.4
+indexrl==0.1.5
 gradio==3.34.0
