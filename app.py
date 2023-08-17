@@ -122,8 +122,8 @@ with gr.Blocks(title="IndexRL") as demo:
         )
         find_exp_btn = gr.Button("Find Expressions")
         stop_btn = gr.Button("Stop")
-        out_exp_tree = gr.Textbox(label="Latest Expression Tree", interactive=False)
         best_exps = gr.Textbox(label="Best Expressions", interactive=False)
+        out_exp_tree = gr.Textbox(label="Latest Expression Tree", interactive=False)
 
     with gr.Tab("Datasets"):
         dataset_upload = gr.File(label="Upload Data ZIP file")
