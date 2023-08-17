@@ -86,6 +86,7 @@ def find_expression(dataset_name: str):
         print(f"Buffer size new = {len(data_buffer)}.")
 
         agent, optimizer, loss = train_iter(agent, optimizer, data_buffer)
+        print("Loss:", loss)
 
         i_str = str(i).rjust(3, "0")
         if models_dir:
@@ -110,7 +111,7 @@ def find_expression(dataset_name: str):
         yield tree, top_5_str
 
 
-with gr.Blocks() as demo:
+with gr.Blocks(title="IndexRL") as demo:
     gr.Markdown("# IndexRL")
     meta_data_df = pd.read_csv(meta_data_file)
 
