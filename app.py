@@ -58,15 +58,22 @@ def get_tree(exp_num: int = 1, tree_num: int = 1):
 
 
 def change_expression(exp_num: int = 1, tree_num: int = 1):
-    paths = glob(os.path.join(global_logs_dir, f"tree_{int(exp_num)}_*.txt"))
+    try:
+        paths = glob(os.path.join(global_logs_dir, f"tree_{int(exp_num)}_*.txt"))
+    except TypeError:
+        return "", gr.Slider.update()
+
     tree_num = max(min(len(paths), tree_num), 1)
 
     tree = get_tree(exp_num, tree_num)
 
-    return tree, gr.Slider.update(value=tree_num, maximum=len(paths))
+    return tree, gr.Slider.update(value=tree_num, maximum=len(paths), interactive=True)
 
 
 def find_expression(dataset_name: str):
+    if dataset_name == "":
+        return ("", gr.Slider.update(value=1, interactive=False))
+
     global global_logs_dir
     meta_data_df = pd.read_csv(meta_data_file, index_col="Name")
     n_channels = meta_data_df["Channels"][dataset_name]
@@ -135,9 +142,7 @@ def find_expression(dataset_name: str):
             )
         )
 
-        yield tree, top_5_str, gr.Slider.update(
-            value=i, maximum=i, interactive=True
-        ), gr.Slider.update(value=1, maximum=len(data[-1][0]), interactive=True)
+        yield top_5_str, gr.Slider.update(value=i, maximum=i, interactive=True)
 
 
 with gr.Blocks(title="IndexRL") as demo:
@@ -176,7 +181,7 @@ with gr.Blocks(title="IndexRL") as demo:
     find_exp_event = find_exp_btn.click(
         find_expression,
         inputs=[select_dataset],
-        outputs=[out_exp_tree, best_exps, select_exp, select_tree],
+        outputs=[best_exps, select_exp],
     )
     stop_btn.click(fn=None, inputs=None, outputs=None, cancels=[find_exp_event])
     select_exp.change(
